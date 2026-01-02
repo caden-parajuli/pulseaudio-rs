@@ -14,13 +14,15 @@ use std::{
 use futures::channel::oneshot;
 use mio::net::UnixStream;
 
-use crate::protocol::{self, DescriptorFlags};
+use crate::protocol::{self, DescriptorFlags, SubscriptionEvent, SubscriptionMask};
 
 use super::{ClientError, PlaybackSource, RecordSink};
 
 type ReplyResult<'a> =
     Result<(&'a mut ReactorState, &'a mut dyn io::BufRead), protocol::PulseError>;
 type ReplyHandler = Box<dyn FnOnce(ReplyResult<'_>) + Send + 'static>;
+
+pub(super) type SubscriptionHandler = Box<dyn FnMut(SubscriptionEvent) + Send>;
 
 struct PlaybackStreamState {
     stream_info: protocol::CreatePlaybackStreamReply,
@@ -39,6 +41,7 @@ pub(super) struct RecordStreamState {
 #[derive(Default)]
 struct ReactorState {
     handlers: BTreeMap<u32, ReplyHandler>,
+    subscription_handler: Option<SubscriptionHandler>,
     playback_streams: BTreeMap<u32, PlaybackStreamState>,
     record_streams: BTreeMap<u32, RecordStreamState>,
 }
@@ -227,6 +230,20 @@ impl ReactorHandle {
 
         self.write_command(seq, protocol::Command::DeleteRecordStream(channel))?;
         rx.await.map_err(|_| ClientError::Disconnected)
+    }
+
+    pub(super) async fn subscribe(
+        &self,
+        mask: SubscriptionMask,
+        handler: SubscriptionHandler,
+    ) -> Result<(), ClientError> {
+        self.state
+            .upgrade()
+            .ok_or(ClientError::Disconnected)?
+            .lock()
+            .unwrap()
+            .subscription_handler = Some(handler);
+        self.roundtrip_ack(protocol::Command::Subscribe(mask)).await
     }
 
     fn write_command(&self, seq: u32, cmd: protocol::Command) -> Result<(), ClientError> {
@@ -438,6 +455,13 @@ impl Reactor {
                     stream.requested_bytes += length as usize;
                 } else {
                     log::error!("unknown stream: {channel}");
+                }
+            }
+            protocol::Command::SubscribeEvent(event) => {
+                if let Some(handler) = state.subscription_handler.as_mut() {
+                    handler(event);
+                } else {
+                    log::debug!("unexpected subscription event: {cmd:?}");
                 }
             }
             _ => log::debug!("ignoring unexpected command: {cmd:?}"),

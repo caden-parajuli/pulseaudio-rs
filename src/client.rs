@@ -5,7 +5,7 @@ use std::{
 
 use mio::net::UnixStream;
 
-use crate::protocol::ChannelVolume;
+use crate::protocol::{ChannelVolume, SubscriptionMask};
 
 use super::protocol;
 
@@ -437,6 +437,16 @@ impl Client {
                 suspend,
             }))
             .await
+    }
+
+    /// Subscribes to events and registers subscription handler.
+    /// Should only be called once per client.
+    pub async fn subscribe(
+        &self,
+        mask: SubscriptionMask,
+        handler: reactor::SubscriptionHandler,
+    ) -> Result<()> {
+        self.handle.subscribe(mask, handler).await
     }
 
     /// Creates a new playback stream. The given callback will be called when the
