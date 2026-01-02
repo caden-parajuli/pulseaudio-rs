@@ -5,6 +5,8 @@ use std::{
 
 use mio::net::UnixStream;
 
+use crate::protocol::ChannelVolume;
+
 use super::protocol;
 
 mod playback_source;
@@ -320,6 +322,58 @@ impl Client {
             .await
     }
 
+    /// Sets a sink's volume.
+    pub async fn set_sink_volume(&self, index: u32, volume: ChannelVolume) -> Result<()> {
+        self.handle
+            .roundtrip_ack(protocol::Command::SetSinkVolume(
+                protocol::SetDeviceVolumeParams {
+                    device_index: Some(index),
+                    device_name: None,
+                    volume,
+                },
+            ))
+            .await
+    }
+
+    /// Sets a sink's volume by name.
+    pub async fn set_sink_volume_by_name(&self, name: CString, volume: ChannelVolume) -> Result<()> {
+        self.handle
+            .roundtrip_ack(protocol::Command::SetSinkVolume(
+                protocol::SetDeviceVolumeParams {
+                    device_index: None,
+                    device_name: Some(name),
+                    volume,
+                },
+            ))
+            .await
+    }
+
+    /// Sets a source's volume.
+    pub async fn set_source_volume(&self, index: u32, volume: ChannelVolume) -> Result<()> {
+        self.handle
+            .roundtrip_ack(protocol::Command::SetSourceVolume(
+                protocol::SetDeviceVolumeParams {
+                    device_index: Some(index),
+                    device_name: None,
+                    volume,
+                },
+            ))
+            .await
+    }
+
+    /// Sets a source's volume by name.
+    pub async fn set_source_volume_by_name(&self, name: CString, volume: ChannelVolume) -> Result<()> {
+        self.handle
+            .roundtrip_ack(protocol::Command::SetSourceVolume(
+                protocol::SetDeviceVolumeParams {
+                    device_index: None,
+                    device_name: Some(name),
+                    volume,
+                },
+            ))
+            .await
+    }
+
     /// Kills a client.
     pub async fn kill_client(&self, index: u32) -> Result<()> {
         self.handle
@@ -427,8 +481,8 @@ mod tests {
     use std::time;
 
     use super::*;
-    use anyhow::anyhow;
     use anyhow::Context as _;
+    use anyhow::anyhow;
     use futures::executor::block_on;
     use rand::Rng;
 
@@ -773,10 +827,12 @@ mod tests {
         }
 
         let client_list = block_on(client2.list_clients())?;
-        assert!(client_list
-            .iter()
-            .find(|client| client.name == client1_info.name)
-            .is_none());
+        assert!(
+            client_list
+                .iter()
+                .find(|client| client.name == client1_info.name)
+                .is_none()
+        );
 
         Ok(())
     }

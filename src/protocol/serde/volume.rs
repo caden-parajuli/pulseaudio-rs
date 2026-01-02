@@ -127,6 +127,16 @@ impl Default for ChannelVolume {
 
 // TODO: empty cvolumes are invalid!
 impl ChannelVolume {
+    /// Creates a `ChannelVolume` with the given channels.
+    pub fn new(channels: impl IntoIterator<Item = Volume>) -> Self {
+        let mut channel_volume = Self::empty();
+        for channel in channels {
+            channel_volume.push(channel);
+        }
+
+        channel_volume
+    }
+
     /// Creates an empty `ChannelVolume` specifying no volumes for any channel.
     pub fn empty() -> Self {
         Self {
@@ -164,6 +174,11 @@ impl ChannelVolume {
     /// Returns the number of channel volumes stored in `self`.
     pub fn channels(&self) -> &[Volume] {
         &self.volumes[..self.channels as usize]
+    }
+
+    /// Returns an iterator over the volumes.
+    pub fn iter<'a>(&'a self) -> Iter<'a> {
+        Iter { inner: self.volumes.iter() }
     }
 }
 
